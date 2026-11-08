@@ -1,0 +1,77 @@
+name: Build APK
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - name: Create project files
+        run: |
+          mkdir -p www assets
+          cp index.html www/index.html
+          if [ -f icon.png ]; then cp icon.png assets/icon-only.png; fi
+          cat > package.json <<'JSON'
+          {
+            "name": "card-scores",
+            "version": "1.0.0",
+            "private": true,
+            "dependencies": {
+              "@capacitor/android": "^7.0.0",
+              "@capacitor/core": "^7.0.0"
+            },
+            "devDependencies": {
+              "@capacitor/cli": "^7.0.0",
+              "@capacitor/assets": "^3.0.5"
+            }
+          }
+          JSON
+          cat > capacitor.config.json <<'JSON'
+          {
+            "appId": "com.ahmad.cardscores",
+            "appName": "ديوان الورق",
+            "webDir": "www"
+          }
+          JSON
+
+      - run: npm install
+
+      - run: npx cap add android
+
+      - name: Generate icons (optional)
+        run: |
+          if [ -f assets/icon-only.png ]; then
+            npx @capacitor/assets generate --android --iconBackgroundColor '#0a3f29' --iconBackgroundColorDark '#0a3f29' || true
+          fi
+
+      - name: Use fixed signing key
+        run: |
+          mkdir -p ~/.android
+          if [ -f debug.keystore ]; then cp debug.keystore ~/.android/debug.keystore; fi
+
+      - run: npx cap sync android
+
+      - name: Build APK
+        run: |
+          cd android
+          chmod +x gradlew
+          ./gradlew assembleDebug
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: card-scores-apk
+          path: android/app/build/outputs/apk/debug/app-debug.apk
